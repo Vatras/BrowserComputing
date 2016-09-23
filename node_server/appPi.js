@@ -6,10 +6,13 @@ var Big = require('big.js')
 var	fs = require('fs');
 var util = require('util');
 
-var logFile = fs.createWriteStream('logs/logs.txt', {flags: 'a'}); //use {flags: 'w'} to open in write mode
 var app = express();
 var io = socketIO(server);
 var logStdout = process.stdout;
+
+fs.existsSync("logs") || fs.mkdirSync("logs");
+fs.existsSync("public") || fs.mkdirSync("public");
+var logFile = fs.createWriteStream('logs/logs.txt', {flags: 'a'}); //use {flags: 'w'} to open in write mode
 
 app.use(express.static(__dirname + '/public'));
 app.use(session({secret: 'XYZ11233@11'}));

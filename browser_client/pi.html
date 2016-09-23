@@ -1,0 +1,223 @@
+<!doctype html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <style>
+    h1,h2,div,button{
+      text-align:center;
+      display:block;
+      margin-left:auto;
+      margin-right:auto;
+    }
+    button{
+      display:none;
+      width:150px;
+      height:75px;
+    }
+    div{
+      width:800px;
+      margin-bottom:10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Test pi</h1>
+  <div id="divy">
+  </div>
+  <div id="okno1"></div>
+  <div id="okno2"><h2>Real PI value:  3,141592653589793238462643383279 </h2></div>
+
+  <script src="socket.io/socket.io.js"></script>
+  <script>
+
+    var sum;
+    var times=[];
+    var time1;
+    var tempWorkers=[];
+    var currNumOfWorkers;
+    function createWorkers(numberOfWorkers)
+    {
+      sum=0;
+      currNumOfWorkers=numberOfWorkers;
+      for (var i=0;i<currNumOfWorkers;i++)
+      { 
+        tempWorkers[i] = new Worker('test.js');
+
+        tempWorkers[i].onmessage = function(e) 
+        {
+          sum+=1;
+          if(sum==currNumOfWorkers)
+          {
+            var resultTime=new Date().getTime();
+            var t=resultTime-time1;
+            showMessage(currNumOfWorkers+" : "+t,"okno1");
+            times.push(resultTime-time1);
+            if(currNumOfWorkers!=16)
+            {
+              findNumOfThreads(currNumOfWorkers*2)
+            }
+            else
+            {
+
+              localStorage.setItem("numOfThreads",2);
+              for(var x=1;x<times.length;x++)
+              {
+                if(times[x-1]*1.5<times[x])
+                {
+                  var numOfThreads=Math.pow(2, x-1);
+                  if(numOfThreads<1 || numOfThreads>16)
+                    numOfThreads=2;
+                  localStorage.setItem("numOfThreads",numOfThreads);
+                  if(tempWorkers.length>0)
+                    for(x in tempWorkers)
+                    {
+                      tempWorkers[x].terminate();
+                    }
+                    main();
+                    break;
+                  }
+                  if(x==times.length-1)
+                  {
+                    localStorage.setItem("numOfThreads",8);
+                  } 
+                }
+              } 
+            }
+          }
+        }
+        time1=new Date().getTime();
+        for (i=0;i<currNumOfWorkers;i++)
+        {
+         tempWorkers[i].postMessage({});
+       }
+     }
+
+     function findNumOfThreads(temp)
+     {
+      if(temp==null)
+        temp=1;
+      if(tempWorkers.length>0)
+        for(x in tempWorkers)
+        {
+          tempWorkers[x].terminate();
+        }
+        createWorkers(temp);
+
+      }
+      function showMessage(zmienna,element)
+      {
+        document.getElementById("okno1").style.display="block";
+        console.log(element);
+        if(parseInt(zmienna)!=3)
+           document.getElementById(element).innerHTML="<h2> Calculating number of cores is :"+zmienna+"</h2>";
+        else
+          document.getElementById(element).innerHTML="<h2> Current computed PI value is :"+zmienna+"</h2>";
+      }
+      var errorHandler = function(e)
+      {
+        alert('Error: Line ' + e.lineno + ' in ' + e.filename + ': ' + e.message);
+      };
+    </script>
+    <script>
+      var worker=[];
+      var firstValue=true;
+      if(localStorage.getItem("numOfThreads")==null || localStorage.getItem("numOfThreads")=="null")
+        findNumOfThreads();
+      else
+        main();
+      function main()
+      {
+       var numOfThreads=localStorage.getItem("numOfThreads");
+       var socket=io.connect("localhost:3000");
+       socket.on("connectionMade",function(a){
+        if(a.version!="0.05")
+        {
+          if(worker.length>0)
+          {
+            for(x in worker)
+            {
+              tempWorkers[x].terminate();
+            }
+          }
+          window.location.reload(true);
+        }
+        else
+        {
+          console.log(a);
+          calc_pi();
+        }
+        
+      });
+       socket.on("currentPiValue",function(a){
+        if(firstValue)
+          setTimeout(function(){
+            firstValue=false;
+            showMessage(a.currentPiValue,"okno1");},5000);
+        else
+          showMessage(a.currentPiValue,"okno1");
+      });
+
+
+       function calc_pi()
+       {
+
+         if(worker.length>0)
+         {
+          for(x in worker)
+          {
+            tempWorkers[x].terminate();
+          }
+        }
+        var n=4;
+        var sumaOdbiorow=0;
+        var radius=1;
+        var iteracjeEnd=125000000;
+        var points_inside=0;
+        var points_total=0;
+        for (i=0;i<numOfThreads;i++)
+        {
+        worker[i] = new Worker('pi.js');//podmienic na pi_crypto.js w przypadku zmiany randomizacji
+
+
+        worker[i].onmessage = function(e)
+        {
+          console.log("Received message from worker no. "+e.data.numer);
+          numer=e.data.numer;
+          points_inside+=e.data.points_inside;
+          points_total+=e.data.points_total;
+          sumaOdbiorow++
+          if(sumaOdbiorow==numOfThreads)
+          {
+            sumaOdbiorow=0;
+            socket.emit("getNewIterations",
+            {
+              "points_inside":points_inside,
+              "points_total" :points_total
+            });
+
+            points_inside=0;
+            points_total=0;
+          }
+          worker[numer].postMessage({
+            'numer': numer,
+            'radius': radius,
+            'itEnd': iteracjeEnd
+          });
+        };
+
+        worker[i].onerror = errorHandler;
+
+        worker[i].postMessage({
+          'numer': i,
+          'radius': radius,
+          'itEnd': iteracjeEnd
+        });
+
+      }
+    }
+
+  }
+</script>
+
+</body>
+</html>
